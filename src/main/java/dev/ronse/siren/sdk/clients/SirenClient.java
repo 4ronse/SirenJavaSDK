@@ -5,7 +5,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
+import io.socket.client.IO;
 import okhttp3.*;
 import org.jetbrains.annotations.NotNull;
 
@@ -21,13 +23,15 @@ import java.time.temporal.ChronoField;
 
 public final class SirenClient {
 
-    private @NotNull final URI baseURI;
     private @NotNull final OkHttpClient client;
-    private final String apiKey;
     private final ObjectMapper objectMapper;
+
+    final String apiKey;
+    @NotNull final URI baseURI;
 
     private final StatsClient statsClient;
     private final DataClient dataClient;
+    private AlertsClient alertsClient;
 
     /**
      * Creates a SirenClient with the default API base URL.
@@ -63,7 +67,10 @@ public final class SirenClient {
                     // Probably javascript anomaly idk
 
                     private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder()
-                            .appendPattern("yyyy-MM-dd HH:mm:ss")
+                            .appendPattern("yyyy-MM-dd")
+                            .optionalStart().appendLiteral('T').optionalEnd()
+                            .optionalStart().appendLiteral(' ').optionalEnd()
+                            .appendPattern("HH:mm:ss")
                             .optionalStart().appendFraction(ChronoField.MILLI_OF_SECOND, 0, 3, true).optionalEnd()
                             .appendPattern("[XXXXX][XXXX][XXX][XX][X]")
                             .toFormatter()
@@ -108,6 +115,20 @@ public final class SirenClient {
      */
     public DataClient data() {
         return dataClient;
+    }
+
+    /**
+     * Alerts client
+     */
+    public AlertsClient alertsClient() {
+        if(alertsClient == null) alertsClient = AlertsClient.fromSirenClient(this);
+        return alertsClient;
+    }
+
+    public AlertsClient alertsClient(AlertsClientOpts opts) {
+        if(alertsClient != null) throw new IllegalStateException("Each SirenClient may have a single instance of AlertsClient!");
+        alertsClient = AlertsClient.fromSirenClient(this, opts);
+        return alertsClient;
     }
 
     // -------------------------
