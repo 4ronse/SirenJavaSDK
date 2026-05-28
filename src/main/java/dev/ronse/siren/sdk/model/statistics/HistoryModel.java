@@ -1,5 +1,6 @@
 package dev.ronse.siren.sdk.model.statistics;
 
+import dev.ronse.siren.sdk.model.PaginatedModel;
 import dev.ronse.siren.sdk.model.shared.Pagination;
 import dev.ronse.siren.sdk.wrappers.AlertOrigin;
 import dev.ronse.siren.sdk.wrappers.AlertType;
@@ -13,7 +14,7 @@ import java.util.UUID;
 public record HistoryModel (
         List<HistoryData> data,
         Pagination pagination
-) {
+) implements PaginatedModel<HistoryModel.HistoryData> {
     public record HistoryData (
             UUID id,
             Instant timestamp,

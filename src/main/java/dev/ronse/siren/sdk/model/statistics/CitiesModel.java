@@ -1,5 +1,6 @@
 package dev.ronse.siren.sdk.model.statistics;
 
+import dev.ronse.siren.sdk.model.PaginatedModel;
 import dev.ronse.siren.sdk.model.shared.Pagination;
 import dev.ronse.siren.sdk.model.shared.Translation;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +11,7 @@ import java.util.List;
 public record CitiesModel (
         List<CitiesData> data,
         Pagination pagination
-) {
+) implements PaginatedModel<CitiesModel.CitiesData> {
 
     public record CitiesData(
             String city,
