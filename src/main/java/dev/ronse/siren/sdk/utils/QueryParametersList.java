@@ -2,9 +2,13 @@ package dev.ronse.siren.sdk.utils;
 
 import okhttp3.HttpUrl;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public final class QueryParametersList {
     private static final Logger LOGGER = Logger.getLogger(QueryParametersList.class.getName());
@@ -53,4 +57,16 @@ public final class QueryParametersList {
 
         return builder;
     }
+
+    public String toQueryString() {
+        return map.entrySet()
+                .stream()
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .collect(Collectors.joining("&"));
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
 }

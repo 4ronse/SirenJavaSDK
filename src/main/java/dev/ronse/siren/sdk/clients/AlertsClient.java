@@ -30,6 +30,7 @@ public final class AlertsClient {
 
         IO.Options ioOpts = SocketOptionBuilder.builder(opts.getIoOpts())
                 .setAuth(Map.of("apiKey", client.apiKey))
+                .setQuery(opts.query().toQueryString())
                 .build();
 
         socket = IO.socket(uri, ioOpts);
