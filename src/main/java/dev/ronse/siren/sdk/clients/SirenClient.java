@@ -1,9 +1,9 @@
 package dev.ronse.siren.sdk.clients;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
 import okhttp3.*;
@@ -12,6 +12,11 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 
 
 public final class SirenClient {
@@ -51,6 +56,24 @@ public final class SirenClient {
 
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
+                .registerModule(new SimpleModule().addDeserializer(Instant.class, new JsonDeserializer<>() {
+                    // API calls result in inconsistent timestamp formats.
+                    // Some timestamps have milliseconds and some don't
+                    // Timezone stamp also changes to either Z or +00?
+                    // Probably javascript anomaly idk
+
+                    private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder()
+                            .appendPattern("yyyy-MM-dd HH:mm:ss")
+                            .optionalStart().appendFraction(ChronoField.MILLI_OF_SECOND, 0, 3, true).optionalEnd()
+                            .appendPattern("[XXXXX][XXXX][XXX][XX][X]")
+                            .toFormatter()
+                            .withZone(ZoneOffset.UTC);
+
+                    @Override
+                    public Instant deserialize(JsonParser p, DeserializationContext ctx) throws IOException {
+                        return Instant.from(FORMATTER.parse(p.getText()));
+                    }
+                }))
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
