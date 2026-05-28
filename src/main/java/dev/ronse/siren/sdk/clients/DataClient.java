@@ -17,7 +17,7 @@ public final class DataClient {
         this.sirenClient = sirenClient;
     }
 
-    public static DataClient fromSirenClient(SirenClient sirenClient) {
+    static DataClient fromSirenClient(SirenClient sirenClient) {
         return new DataClient(sirenClient);
     }
 
