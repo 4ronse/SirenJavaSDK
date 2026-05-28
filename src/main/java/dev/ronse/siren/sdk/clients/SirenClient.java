@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import dev.ronse.siren.sdk.clients.options.data.ShelterSearchOpts;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
 import okhttp3.*;
 import org.jetbrains.annotations.NotNull;
@@ -14,12 +13,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 
+
 public final class SirenClient {
 
-    private @NotNull
-    final URI baseURI;
-    private @NotNull
-    final OkHttpClient client;
+    private @NotNull final URI baseURI;
+    private @NotNull final OkHttpClient client;
     private final String apiKey;
     private final ObjectMapper objectMapper;
 
