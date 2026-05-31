@@ -7,7 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 // https://api.siren.co.il/stats/distribution
-public record DistributionModel<T> (
+public record DistributionModel<T>(
         List<DistributionData<T>> data,
         int totalAlerts,
         Pagination pagination

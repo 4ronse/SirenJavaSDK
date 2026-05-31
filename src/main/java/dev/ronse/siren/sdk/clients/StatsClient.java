@@ -3,6 +3,7 @@ package dev.ronse.siren.sdk.clients;
 import com.fasterxml.jackson.core.type.TypeReference;
 import dev.ronse.siren.sdk.clients.options.statistics.*;
 import dev.ronse.siren.sdk.clients.options.statistics.enums.DistributionGroupBy;
+import dev.ronse.siren.sdk.model.shared.PagedResponse;
 import dev.ronse.siren.sdk.model.statistics.*;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 
@@ -19,126 +20,123 @@ public final class StatsClient {
         this.client = client;
     }
 
-    public CitiesModel cities(CitiesOpts opts) throws IOException {
-        return client.get("/stats/cities", opts.toQueryParams(), CitiesModel.class);
-    }
-
     /**
-     * Retrieves alert distribution data grouped by category.
+     * Alert counts broken down by city.
+     * <p>
+     * By default, responses are lean - only city name, zone, and count. Use the
+     * {@code include} parameter to opt-in to extra fields like translations and
+     * coordinates, keeping bandwidth low when you don't need them.
      *
      * <pre>{@code
-     * // With options
-     * client.stats().distributionByCategory(new DistributionOpts()
-     *         .from(Instant.now().minus(7, DAYS))
-     *         .to(Instant.now()));
-     *
-     * // Without options
-     * client.stats().distributionByCategory();
+     * client.stats().cities(new CitiesOpts()
+     *         .search("תל אביב")
+     *         .include(DataInclude.TRANSLATIONS, DataInclude.COORDS));
      * }</pre>
      *
-     * @param opts distribution query options
-     * @return a {@link DistributionModel} keyed by {@link AlertType}
+     * @param opts query options
      * @throws IOException if the request fails
      */
-    public DistributionModel<AlertType> distributionByCategory(DistributionOpts opts) throws IOException {
-        return client.get(
-                "/stats/distribution",
-                opts.toQueryParams(),
-                new TypeReference<>() {}
-        );
+    public PagedResponse<CitiesModel> cities(CitiesOpts opts) throws IOException {
+        return client.get("/stats/cities", opts.toQueryParams(), new TypeReference<>() {});
+    }
+
+    public PagedResponse<CitiesModel> cities() throws IOException {
+        return cities(new CitiesOpts());
     }
 
     /**
-     * Retrieves alert distribution data grouped by category with default options.
+     * Alert distribution grouped by type (category) or origin source.
+     * <p>
+     * Useful for building pie charts and computing percentage breakdowns.
+     * The response includes {@code totalAlerts} so percentages can be calculated
+     * client-side without extra requests.
      *
-     * @return a {@link DistributionModel} keyed by {@link AlertType}
+     * <pre>{@code
+     * client.stats().distributionByCategory(new DistributionOpts()
+     *         .startDate(Instant.now().minus(7, DAYS))
+     *         .endDate(Instant.now()));
+     * }</pre>
+     *
+     * @param opts query options
+     * @return distribution keyed by {@link AlertType}
      * @throws IOException if the request fails
-     * @see #distributionByCategory(DistributionOpts)
+     * @see #distributionByOrigin(DistributionOpts)
      */
+    public DistributionModel<AlertType> distributionByCategory(DistributionOpts opts) throws IOException {
+        return client.get("/stats/distribution", opts.toQueryParams(), new TypeReference<>() {});
+    }
+
     public DistributionModel<AlertType> distributionByCategory() throws IOException {
         return distributionByCategory(new DistributionOpts());
     }
 
     /**
-     * Retrieves alert distribution data grouped by origin.
+     * Alert distribution grouped by origin source.
+     * <p>
+     * Same as {@link #distributionByCategory(DistributionOpts)} but keyed by origin
+     * string (e.g. "gaza", "lebanon") instead of alert type. The {@code groupBy}
+     * field in opts is overridden automatically.
      *
      * <pre>{@code
-     * // With options
      * client.stats().distributionByOrigin(new DistributionOpts()
-     *         .from(Instant.now().minus(7, DAYS))
-     *         .to(Instant.now()));
-     *
-     * // Without options
-     * client.stats().distributionByOrigin();
+     *         .startDate(Instant.now().minus(7, DAYS))
+     *         .endDate(Instant.now()));
      * }</pre>
      *
-     * @param opts distribution query options (the {@code groupBy} field is overridden to
-     *             {@link DistributionGroupBy#ORIGIN})
-     * @return a {@link DistributionModel} keyed by origin string
+     * @param opts query options - {@code groupBy} is ignored and overridden to ORIGIN
+     * @return distribution keyed by origin string
      * @throws IOException if the request fails
+     * @see #distributionByCategory(DistributionOpts)
      */
     public DistributionModel<String> distributionByOrigin(DistributionOpts opts) throws IOException {
-        return client.get(
-                "/stats/distribution",
+        return client.get("/stats/distribution",
                 opts.groupBy(DistributionGroupBy.ORIGIN).toQueryParams(),
-                new TypeReference<>() {}
-        );
+                new TypeReference<>() {});
     }
 
-    /**
-     * Retrieves alert distribution data grouped by origin with default options.
-     *
-     * @return a {@link DistributionModel} keyed by origin string
-     * @throws IOException if the request fails
-     * @see #distributionByOrigin(DistributionOpts)
-     */
     public DistributionModel<String> distributionByOrigin() throws IOException {
         return distributionByOrigin(new DistributionOpts());
     }
 
     /**
-     * Retrieves historical alert data.
+     * Detailed historical alert records with full city data.
+     * <p>
+     * Each record includes the list of cities targeted simultaneously. By default,
+     * only city IDs and names are returned - use the {@code include} parameter to
+     * add translations and coordinates as needed.
      *
      * <pre>{@code
-     * // With options
      * client.stats().history(new HistoryOpts()
-     *         .from(Instant.now().minus(30, DAYS))
-     *         .to(Instant.now())
+     *         .startDate(Instant.now().minus(30, DAYS))
+     *         .endDate(Instant.now())
      *         .limit(100));
-     *
-     * // Without options
-     * client.stats().history();
      * }</pre>
      *
-     * @param opts history query options
-     * @return a {@link HistoryModel} containing the historical records
+     * @param opts query options
      * @throws IOException if the request fails
      */
-    public HistoryModel history(HistoryOpts opts) throws IOException {
-        return client.get("/stats/history", opts.toQueryParams(), HistoryModel.class);
+    public PagedResponse<HistoryModel> history(HistoryOpts opts) throws IOException {
+        return client.get("/stats/history", opts.toQueryParams(), new TypeReference<>() {});
     }
 
-    /**
-     * Retrieves historical alert data with default options.
-     *
-     * @return a {@link HistoryModel} containing the historical records
-     * @throws IOException if the request fails
-     * @see #history(HistoryOpts)
-     */
-    public HistoryModel history() throws IOException {
+    public PagedResponse<HistoryModel> history() throws IOException {
         return history(new HistoryOpts());
     }
 
     /**
-     * Retrieves a list of incidents.
+     * Incident analysis for a specific city.
+     * <p>
+     * For each newsFlash wave, determines whether a real alert followed within a
+     * configurable timeout window. Useful for measuring false-alarm rates and
+     * understanding alert patterns per city.
      *
      * <pre>{@code
-     * // City is REQUIRED
-     * client.stats().incidents(new IncidentsOpts("תל אביב"));
+     * // city is required
+     * client.stats().incidents(new IncidentsOpts("תל אביב")
+     *         .timeoutMinutes(10));
      * }</pre>
      *
-     * @param opts incident query options
-     * @return an {@link IncidentsModel} containing the matching incidents
+     * @param opts query options - city is required
      * @throws IOException if the request fails
      */
     public IncidentsModel incidents(IncidentsOpts opts) throws IOException {
@@ -146,33 +144,26 @@ public final class StatsClient {
     }
 
     /**
-     * Retrieves an aggregated summary.
+     * High-level overview of the alert system.
+     * <p>
+     * By default returns core counts and unique city/zone numbers. Use the
+     * {@code include} parameter to opt-in to top cities, top zones, a time-series
+     * timeline, and peak detection - useful for building dashboards with a single call.
      *
      * <pre>{@code
-     * // With options
      * client.stats().summary(new SummaryOpts()
-     *         .from(Instant.now().minus(24, HOURS))
-     *         .to(Instant.now()));
-     *
-     * // Without options
-     * client.stats().summary();
+     *         .startDate(Instant.now().minus(24, HOURS))
+     *         .endDate(Instant.now())
+     *         .include(SummaryInclude.TOP_CITIES, SummaryInclude.TIMELINE));
      * }</pre>
      *
-     * @param opts summary query options
-     * @return a {@link SummaryModel} containing the aggregated data
+     * @param opts query options
      * @throws IOException if the request fails
      */
     public SummaryModel summary(SummaryOpts opts) throws IOException {
         return client.get("/stats/summary", opts.toQueryParams(), SummaryModel.class);
     }
 
-    /**
-     * Retrieves an aggregated summary with default options.
-     *
-     * @return a {@link SummaryModel} containing the aggregated data
-     * @throws IOException if the request fails
-     * @see #summary(SummaryOpts)
-     */
     public SummaryModel summary() throws IOException {
         return summary(new SummaryOpts());
     }

@@ -55,7 +55,7 @@ public final class SirenClient {
         this.apiKey = apiKey;
         this.baseURI = URI.create(baseURI);
         this.client = new OkHttpClient.Builder()
-                .readTimeout(Duration.ofSeconds(1))
+                .readTimeout(Duration.ofSeconds(25))
                 .build();
 
         this.objectMapper = new ObjectMapper()

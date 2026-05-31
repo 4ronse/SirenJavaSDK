@@ -1,7 +1,5 @@
 package dev.ronse.siren.sdk.model.statistics;
 
-import dev.ronse.siren.sdk.model.PaginatedModel;
-import dev.ronse.siren.sdk.model.shared.Pagination;
 import dev.ronse.siren.sdk.wrappers.AlertOrigin;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 import org.jetbrains.annotations.Nullable;
@@ -12,16 +10,12 @@ import java.util.UUID;
 
 // https://siren.co.il/docs/stats/history
 public record HistoryModel (
-        List<HistoryData> data,
-        Pagination pagination
-) implements PaginatedModel<HistoryModel.HistoryData> {
-    public record HistoryData (
-            UUID id,
-            Instant timestamp,
-            AlertType type,
-            @Nullable AlertOrigin origin,
-            List<HistoryCity> cities
-    ) {}
+        UUID id,
+        Instant timestamp,
+        AlertType type,
+        @Nullable AlertOrigin origin,
+        List<HistoryCity> cities
+) {
 
     public record HistoryCity (
             int id,

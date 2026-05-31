@@ -5,4 +5,12 @@ public record Pagination (
         int limit,
         int offset,
         boolean hasMore
-) { }
+) {
+
+    // Convenience
+    // May not be needed later idk
+    public int pageNumber() {
+        return limit == 0 ? 1 : (offset / limit) + 1;
+    }
+
+}

@@ -9,25 +9,18 @@ import java.util.List;
 
 // https://siren.co.il/docs/stats/cities
 public record CitiesModel (
-        List<CitiesData> data,
-        Pagination pagination
-) implements PaginatedModel<CitiesModel.CitiesData> {
+        String city,
+        String cityZone,
+        int count,
 
-    public record CitiesData(
-            String city,
-            String cityZone,
-            int count,
-
-            // Optional fields - null when not requested
-            @Nullable Translations translations,
-            @Nullable Double lat,
-            @Nullable Double lng,
-            @Nullable List<Double[]> polygons
-    ) { }
-
+        // Optional fields - null when not requested
+        @Nullable Translations translations,
+        @Nullable Double lat,
+        @Nullable Double lng,
+        @Nullable List<Double[]> polygons
+) {
     public record Translations (
             Translation name,
             Translation zone
     ) { }
-
 }
