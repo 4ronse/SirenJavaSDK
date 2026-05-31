@@ -6,10 +6,15 @@ import dev.ronse.siren.sdk.clients.options.statistics.enums.DistributionGroupBy;
 import dev.ronse.siren.sdk.model.shared.PagedResponse;
 import dev.ronse.siren.sdk.model.statistics.*;
 import dev.ronse.siren.sdk.wrappers.AlertType;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 
 public final class StatsClient {
+
+    @NotNull
+    @Contract(value = "_ -> new", pure = true)
     static StatsClient fromSirenClient(SirenClient client) {
         return new StatsClient(client);
     }

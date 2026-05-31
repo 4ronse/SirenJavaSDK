@@ -8,6 +8,8 @@ import io.socket.client.IO;
 import io.socket.client.Socket;
 import io.socket.client.SocketOptionBuilder;
 import io.socket.emitter.Emitter;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 
@@ -60,10 +62,14 @@ public final class AlertsClient {
         });
     }
 
+    @NotNull
+    @Contract(value = "_ -> new", pure = true)
     static AlertsClient fromSirenClient(SirenClient client) {
         return new AlertsClient(client, null);
     }
 
+    @NotNull
+    @Contract(value = "_,_ -> new", pure = true)
     static AlertsClient fromSirenClient(SirenClient client, AlertsClientOpts opts) {
         return new AlertsClient(client, opts);
     }
