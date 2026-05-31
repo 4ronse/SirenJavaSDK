@@ -6,6 +6,7 @@ import dev.ronse.siren.sdk.clients.options.data.ShelterSearchOpts;
 import dev.ronse.siren.sdk.model.data.CitiesCatalogModel;
 import dev.ronse.siren.sdk.model.data.ShelterSearchModel;
 import dev.ronse.siren.sdk.model.shared.PagedResponse;
+import dev.ronse.siren.sdk.utils.Paginator;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
@@ -67,5 +68,15 @@ public final class DataClient {
 
     public PagedResponse<CitiesCatalogModel> cities() throws IOException {
         return cities(new CitiesCatalogOpts());
+    }
+
+    // Paginators
+
+    public Paginator<CitiesCatalogModel> citiesPaginator(CitiesCatalogOpts opts) throws IOException {
+        return client.get("/data/cities", opts.toQueryParams(), new TypeReference<>() {});
+    }
+
+    public Paginator<CitiesCatalogModel> citiesPaginator() throws IOException {
+        return citiesPaginator(new CitiesCatalogOpts());
     }
 }

@@ -5,6 +5,7 @@ import dev.ronse.siren.sdk.clients.options.statistics.*;
 import dev.ronse.siren.sdk.clients.options.statistics.enums.DistributionGroupBy;
 import dev.ronse.siren.sdk.model.shared.PagedResponse;
 import dev.ronse.siren.sdk.model.statistics.*;
+import dev.ronse.siren.sdk.utils.Paginator;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -171,5 +172,88 @@ public final class StatsClient {
 
     public SummaryModel summary() throws IOException {
         return summary(new SummaryOpts());
+    }
+
+
+    // Paginators
+
+    /**
+     * Paginator for {@link #cities(CitiesOpts)}.
+     * <p>
+     * The same opts instance is reused across pages - offset and limit are
+     * overridden automatically on each fetch.
+     *
+     * <pre>{@code
+     * client.stats().citiesPaginator(new CitiesOpts().search("תל אביב"))
+     *         .stream()
+     *         .forEach(city -> System.out.println(city.city()));
+     * }</pre>
+     */
+    public Paginator<CitiesModel> citiesPaginator(CitiesOpts opts) {
+        return Paginator.of(
+                (offset, limit) -> cities(opts.offset(offset).limit(limit))
+        );
+    }
+
+    public Paginator<CitiesModel> citiesPaginator() {
+        return citiesPaginator(new CitiesOpts());
+    }
+
+    /**
+     * Paginator for {@link #history(HistoryOpts)}.
+     *
+     * <pre>{@code
+     * client.stats().historyPaginator(new HistoryOpts()
+     *         .startDate(Instant.now().minus(30, DAYS)))
+     *         .stream()
+     *         .forEach(record -> System.out.println(record.timestamp()));
+     * }</pre>
+     */
+    public Paginator<HistoryModel> historyPaginator(HistoryOpts opts) {
+        return Paginator.of(
+                (offset, limit) -> history(opts.offset(offset).limit(limit))
+        );
+    }
+
+    public Paginator<HistoryModel> historyPaginator() {
+        return historyPaginator(new HistoryOpts());
+    }
+
+    /**
+     * Paginator for {@link #distributionByCategory(DistributionOpts)}.
+     *
+     * <pre>{@code
+     * client.stats().distributionByCategoryPaginator()
+     *         .stream()
+     *         .forEach(d -> System.out.println(d.label() + ": " + d.count()));
+     * }</pre>
+     */
+    public Paginator<DistributionModel.DistributionData<AlertType>> distributionByCategoryPaginator(DistributionOpts opts) {
+        return Paginator.of(
+                (offset, limit) -> distributionByCategory(opts.offset(offset).limit(limit))
+        );
+    }
+
+    public Paginator<DistributionModel.DistributionData<AlertType>> distributionByCategoryPaginator() {
+        return distributionByCategoryPaginator(new DistributionOpts());
+    }
+
+    /**
+     * Paginator for {@link #distributionByOrigin(DistributionOpts)}.
+     *
+     * <pre>{@code
+     * client.stats().distributionByOriginPaginator()
+     *         .stream()
+     *         .forEach(d -> System.out.println(d.label() + ": " + d.count()));
+     * }</pre>
+     */
+    public Paginator<DistributionModel.DistributionData<String>> distributionByOriginPaginator(DistributionOpts opts) {
+        return Paginator.of(
+                (offset, limit) -> distributionByOrigin(opts.offset(offset).limit(limit))
+        );
+    }
+
+    public Paginator<DistributionModel.DistributionData<String>> distributionByOriginPaginator() {
+        return distributionByOriginPaginator(new DistributionOpts());
     }
 }
