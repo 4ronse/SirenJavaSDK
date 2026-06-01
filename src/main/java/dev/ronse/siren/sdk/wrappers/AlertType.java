@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class AlertType {
-    public static final AlertType MISSILES                          = new AlertType("missiles");
+    public static final AlertType MISSILES                         = new AlertType("missiles");
     public static final AlertType RADIOLOGICAL_EVENT               = new AlertType("radiologicalEvent");
     public static final AlertType EARTHQUAKE                       = new AlertType("earthQuake");
     public static final AlertType TSUNAMI                          = new AlertType("tsunami");
@@ -21,7 +21,7 @@ public final class AlertType {
     public static final AlertType END_ALERT                        = new AlertType("endAlert");
 
     // Drills
-    public static final AlertType MISSILES_DRILL                        = new AlertType("missilesDrill");
+    public static final AlertType MISSILES_DRILL                       = new AlertType("missilesDrill");
     public static final AlertType RADIOLOGICAL_EVENT_DRILL             = new AlertType("radiologicalEventDrill");
     public static final AlertType EARTHQUAKE_DRILL                     = new AlertType("earthQuakeDrill");
     public static final AlertType TSUNAMI_DRILL                        = new AlertType("tsunamiDrill");
