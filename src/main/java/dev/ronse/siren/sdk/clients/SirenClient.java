@@ -8,7 +8,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
 import dev.ronse.siren.sdk.wrappers.AlertType;
-import io.socket.client.IO;
 import okhttp3.*;
 import org.jetbrains.annotations.NotNull;
 

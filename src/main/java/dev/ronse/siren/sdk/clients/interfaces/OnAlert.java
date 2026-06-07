@@ -1,4 +1,4 @@
-package dev.ronse.siren.sdk.clients.insterfaces;
+package dev.ronse.siren.sdk.clients.interfaces;
 
 
 import java.lang.annotation.ElementType;

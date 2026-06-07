@@ -1,7 +1,7 @@
 package dev.ronse.siren.sdk.clients;
 
-import dev.ronse.siren.sdk.clients.insterfaces.ISirenAlertHandler;
-import dev.ronse.siren.sdk.clients.insterfaces.OnAlert;
+import dev.ronse.siren.sdk.clients.interfaces.ISirenAlertHandler;
+import dev.ronse.siren.sdk.clients.interfaces.OnAlert;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.model.AlertModel;
 import dev.ronse.siren.sdk.wrappers.AlertType;
@@ -26,7 +26,7 @@ import java.util.*;
  *
  * alerts.onConnect(args -> System.out.println("Connected"));
  * alerts.onAlert(alert -> System.out.println("Alert: " + alert.title()));
- * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Missile alert: " + alert.city()));
+ * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Missile alert: " + alert.cities()));
  *
  * alerts.connect();
  * }</pre>

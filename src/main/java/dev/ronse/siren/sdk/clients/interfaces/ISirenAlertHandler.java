@@ -1,4 +1,4 @@
-package dev.ronse.siren.sdk.clients.insterfaces;
+package dev.ronse.siren.sdk.clients.interfaces;
 
 import dev.ronse.siren.sdk.model.AlertModel;
 

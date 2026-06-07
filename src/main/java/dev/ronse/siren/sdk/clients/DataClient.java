@@ -72,8 +72,10 @@ public final class DataClient {
 
     // Paginators
 
-    public Paginator<CitiesCatalogModel> citiesPaginator(CitiesCatalogOpts opts) throws IOException {
-        return client.get("/data/cities", opts.toQueryParams(), new TypeReference<>() {});
+    public Paginator<CitiesCatalogModel> citiesPaginator(CitiesCatalogOpts opts) {
+        return Paginator.of(
+                (offset, limit) -> cities(opts.offset(offset).limit(limit))
+        );
     }
 
     public Paginator<CitiesCatalogModel> citiesPaginator() throws IOException {
