@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
+import dev.ronse.siren.sdk.wrappers.AlertType;
 import io.socket.client.IO;
 import okhttp3.*;
 import org.jetbrains.annotations.NotNull;
@@ -19,6 +20,8 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.List;
+import java.util.Map;
 
 
 public final class SirenClient {
@@ -144,6 +147,10 @@ public final class SirenClient {
         return getString("/health").equalsIgnoreCase("ok");
     }
 
+    public Map<AlertType, List<String>> active() throws IOException {
+        return get("/active", QueryParametersList.EMPTY, new TypeReference<>() { });
+    }
+
     // -------------------------
     // Internal HTTP
     // -------------------------
@@ -173,25 +180,11 @@ public final class SirenClient {
      * @hidden - not part of the public API
      */
     private <T> T execute(Request request, Class<T> type) throws IOException {
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful())
-                throw new IOException("Unexpected response code: " + response.code() + "\n" + response.body().string());
-
-            ResponseBody body = response.body();
-            return objectMapper.readValue(body.string(), type);
-        }
+        return objectMapper.readValue(getString(request), type);
     }
-
     /** @hidden — not part of the public API */
     private <T> T execute(Request request, TypeReference<T> type) throws IOException {
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful())
-                throw new IOException("Unexpected response code: " + response.code());
-
-            ResponseBody body = response.body();
-
-            return objectMapper.readValue(body.string(), type);
-        }
+        return objectMapper.readValue(getString(request), type);
     }
 
     /**
@@ -234,6 +227,23 @@ public final class SirenClient {
     /** @hidden — not part of the public API */
     public <T> T get(String path, TypeReference<T> type) throws IOException {
         return get(path, QueryParametersList.EMPTY, type);
+    }
+
+    /**
+     * @hidden - not part of the public API
+     */
+    public String getString(Request request) throws IOException {
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException(
+                        "Unexpected response code: " + response.code() +
+                                "\n" + response.body().string()
+                );
+            }
+
+            ResponseBody body = response.body();
+            return body.string();
+        }
     }
 
     /**

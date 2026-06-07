@@ -1,6 +1,7 @@
 package dev.ronse.siren.sdk.clients;
 
 import dev.ronse.siren.sdk.clients.insterfaces.ISirenAlertHandler;
+import dev.ronse.siren.sdk.clients.insterfaces.OnAlert;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.model.AlertModel;
 import dev.ronse.siren.sdk.wrappers.AlertType;
@@ -13,11 +14,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 
+import java.lang.reflect.Modifier;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Client for receiving real-time alerts via a persistent Socket.IO connection.
@@ -35,6 +34,8 @@ import java.util.Map;
 public final class AlertsClient {
 
     private final Map<AlertType, List<ISirenAlertHandler>> handlerMap = new HashMap<>();
+    private final Set<Class<?>> registeredClasses = new HashSet<>();
+    private final Set<Object> registeredObjects = new HashSet<>();
 
     private final Socket socket;
 
@@ -103,6 +104,13 @@ public final class AlertsClient {
     }
 
     /**
+     * Closes the Socket.IO connection and stops receiving alerts.
+     */
+    public void close() {
+        socket.close();
+    }
+
+    /**
      * Returns whether the socket is currently connected.
      *
      * @return {@code true} if connected, {@code false} otherwise
@@ -162,5 +170,75 @@ public final class AlertsClient {
      */
     public void onAlert(AlertType type, ISirenAlertHandler handler) {
         handlerMap.computeIfAbsent(type, _t -> new ArrayList<>()).add(handler);
+    }
+
+    private record HandlerInvocationTarget(@Nullable Object instance, @NotNull Class<?> clazz) {
+        public boolean isStatic() { return instance == null; }
+    }
+
+    private void parseAndRegister(HandlerInvocationTarget target) {
+        Arrays.stream(target.clazz.getDeclaredMethods())
+                .forEach(method -> {
+                    // Ensure static match
+                    if (Modifier.isStatic(method.getModifiers()) != target.isStatic()) return;
+
+                    OnAlert annotation = method.getAnnotation(OnAlert.class);
+                    if (annotation == null) return;
+
+                    Class<?>[] params = method.getParameterTypes();
+                    if (params.length > 1 || (params.length == 1 && params[0] != AlertModel.class)) {
+                        throw new IllegalArgumentException(
+                                method.getName() + " must take either no parameters or a single AlertModel parameter"
+                        );
+                    }
+
+                    boolean takesAlert = params.length == 1;
+                    String filter = annotation.value();
+
+                    ISirenAlertHandler h = model -> {
+                        try {
+                            method.setAccessible(true);
+                            if (takesAlert) method.invoke(target.instance(), model);
+                            else method.invoke(target.instance());
+                        } catch (Exception e) {
+                            e.printStackTrace(System.err);
+                            throw new RuntimeException("Failed to invoke handler " + method.getName(), e);
+                        }
+                    };
+
+                    if (filter.isBlank()) onAlert(h);
+                    else onAlert(AlertType.fromValue(filter), h);
+                });
+    }
+
+    /**
+     * Registers all non-static handler methods annotated with {@link OnAlert} from the given object instance.
+     *
+     * @param handler The object instance containing the handler methods.
+     * @throws IllegalStateException if the handler instance has already been registered.
+     * @throws IllegalArgumentException if an annotated method has invalid parameter types.
+     */
+    public void registerHandlers(Object handler) {
+        if (registeredObjects.contains(handler))
+            throw new IllegalStateException("Handler " + handler.hashCode() + " is already registered");
+
+        Class<?> clazz = handler.getClass();
+        parseAndRegister(new HandlerInvocationTarget(handler, clazz));
+        registeredObjects.add(handler);
+    }
+
+    /**
+     * Registers all static handler methods annotated with {@link OnAlert} from the given class.
+     *
+     * @param clazz The class containing the static handler methods.
+     * @throws IllegalStateException if the class has already been registered.
+     * @throws IllegalArgumentException if an annotated method has invalid parameter types.
+     */
+    public void registerHandlers(Class<?> clazz) {
+        if (registeredClasses.contains(clazz))
+            throw new IllegalStateException("Handler " + clazz.getSimpleName() + " is already registered");
+
+        parseAndRegister(new HandlerInvocationTarget(null, clazz));
+        registeredClasses.add(clazz);
     }
 }
