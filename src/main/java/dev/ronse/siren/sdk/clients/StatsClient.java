@@ -206,7 +206,7 @@ public final class StatsClient {
      * client.stats().historyPaginator(new HistoryOpts()
      *         .startDate(Instant.now().minus(30, DAYS)))
      *         .stream()
-     *         .forEach(record -> System.out.println(record.timestamp()));
+     *         .forEach(record -> System.out.println(record.receivedAt()));
      * }</pre>
      */
     public Paginator<HistoryModel> historyPaginator(HistoryOpts opts) {

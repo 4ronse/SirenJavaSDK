@@ -14,9 +14,17 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Client for receiving real-time alerts via a persistent Socket.IO connection.
@@ -26,26 +34,48 @@ import java.util.*;
  *
  * alerts.onConnect(args -> System.out.println("Connected"));
  * alerts.onAlert(alert -> System.out.println("Alert: " + alert.title()));
- * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Missile alert: " + alert.cities()));
+ * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Missile: " + alert.cities()));
  *
  * alerts.connect();
  * }</pre>
  */
 public final class AlertsClient {
 
-    private final Map<AlertType, List<ISirenAlertHandler>> handlerMap = new HashMap<>();
-    private final Set<Class<?>> registeredClasses = new HashSet<>();
-    private final Set<Object> registeredObjects = new HashSet<>();
+    private static final Logger LOGGER = Logger.getLogger(AlertsClient.class.getName());
+    private static final int MAX_CITIES_TO_LOG = 5;
+
+    // Catch-all handlers (registered via onAlert(handler) or @OnAlert with no filter).
+    // Kept separate from handlerMap to avoid using null as a ConcurrentHashMap key,
+    // which is not permitted.
+    private final List<ISirenAlertHandler> catchAllHandlers = new CopyOnWriteArrayList<>();
+
+    // Type-specific handlers. ConcurrentHashMap so reads from the Socket.IO thread
+    // and writes from the registration thread don't race. Values are
+    // CopyOnWriteArrayList so iteration during dispatch is over a stable snapshot.
+    private final Map<AlertType, List<ISirenAlertHandler>> handlerMap = new ConcurrentHashMap<>();
+
+    // CopyOnWriteArraySet is a direct thread-safe Set from java.util.concurrent.
+    // Safe here because Class objects are singletons per classloader —
+    // reference equality and equals() are the same thing for Class<?>.
+    private final Set<Class<?>> registeredClasses = new CopyOnWriteArraySet<>();
+
+    // CopyOnWriteArraySet would be wrong here — it uses equals(), not reference
+    // identity. Two distinct handler instances that happen to override equals()
+    // would be treated as duplicates. IdentityHashMap backing guarantees we track
+    // the exact object reference, not logical equality.
+    private final Set<Object> registeredObjects = Collections.synchronizedSet(
+            Collections.newSetFromMap(new IdentityHashMap<>())
+    );
 
     private final Socket socket;
 
     private AlertsClient(SirenClient client, @Nullable AlertsClientOpts opts) {
-        if(opts == null) opts = AlertsClientOpts.builder().build();
+        if (opts == null) opts = AlertsClientOpts.builder().build();
 
-        URI uri = opts.getBaseURL() != null ? opts.getBaseURL() : client.baseURI;
+        URI uri = opts.getBaseURL() != null ? opts.getBaseURL() : client.baseUri();
 
         IO.Options ioOpts = SocketOptionBuilder.builder(opts.getIoOpts())
-                .setAuth(Map.of("apiKey", client.apiKey))
+                .setAuth(Map.of("apiKey", client.apiKey()))
                 .setQuery(opts.query().toQueryString())
                 .build();
 
@@ -53,35 +83,61 @@ public final class AlertsClient {
         socket.on("alert", args -> {
             try {
                 JSONArray alerts = (JSONArray) args[0];
+
                 for (int i = 0; i < alerts.length(); i++) {
-                    AlertModel alert = client.getObjectMapper().readValue(alerts.getString(i), AlertModel.class);
+                    String jsonAlert = alerts.getString(i);
+                    AlertModel alert = client.getObjectMapper().readValue(jsonAlert, AlertModel.class);
+
+                    LOGGER.finer(() -> {
+                        String citiesStr = alert.cities().stream().limit(MAX_CITIES_TO_LOG).collect(Collectors.joining(", "));
+                        int diff = alert.cities().size() - MAX_CITIES_TO_LOG;
+                        if(diff > 0) citiesStr += " (+" + diff + " More)";
+
+                        return String.format(
+                                """
+                                IO.Socket / New Alert
+                                    Type            : %s
+                                    Title           : %s
+                                    Instructions    : %s
+                                    Received At     : %s
+                                    Is Test         : %s
+                                    Cities          : %d
+                                    Cities List     : %s
+                                    Raw JSON        : %s
+                                """,
+                                alert.type(), alert.title(), alert.instructions(), alert.receivedAt(), alert.isTest() ? "True" : "False",
+                                alert.cities().size(), citiesStr, SirenClient.truncate(jsonAlert)
+                        );
+                    });
+
+
                     handleAlert(alert);
                 }
             } catch (Exception e) {
-                System.err.println("Failed to parse alert: " + e.getMessage());
+                LOGGER.log(Level.WARNING, "Failed to parse alert", e);
             }
         });
     }
 
     @NotNull
-    @Contract(value = "_ -> new", pure = true)
+    @Contract(value = "_ -> new")
     static AlertsClient fromSirenClient(SirenClient client) {
         return new AlertsClient(client, null);
     }
 
     @NotNull
-    @Contract(value = "_,_ -> new", pure = true)
+    @Contract(value = "_,_ -> new")
     static AlertsClient fromSirenClient(SirenClient client, AlertsClientOpts opts) {
         return new AlertsClient(client, opts);
     }
 
-    private void handleAlert(AlertModel alert) {
-        getHandlers(null).forEach(handler -> handler.handleAlert(alert));
-        getHandlers(alert.type()).forEach(handler -> handler.handleAlert(alert));
+    public void sendTestAlert(AlertModel alert) {
+        handleAlert(alert.asTest());
     }
 
-    private List<ISirenAlertHandler> getHandlers(AlertType type) {
-        return handlerMap.getOrDefault(type, List.of());
+    private void handleAlert(AlertModel alert) {
+        catchAllHandlers.forEach(h -> h.handleAlert(alert));
+        handlerMap.getOrDefault(alert.type(), List.of()).forEach(h -> h.handleAlert(alert));
     }
 
     // --------------
@@ -153,7 +209,7 @@ public final class AlertsClient {
      * @see #onAlert(AlertType, ISirenAlertHandler)
      */
     public void onAlert(ISirenAlertHandler handler) {
-        onAlert(null, handler);
+        catchAllHandlers.add(handler);
     }
 
     /**
@@ -162,14 +218,14 @@ public final class AlertsClient {
      * alongside type-specific handlers.
      *
      * <pre>{@code
-     * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Incoming: " + alert.city()));
+     * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Incoming: " + alert.cities()));
      * }</pre>
      *
      * @param type    the alert type to filter by
      * @param handler the handler to invoke when an alert of this type is received
      */
     public void onAlert(AlertType type, ISirenAlertHandler handler) {
-        handlerMap.computeIfAbsent(type, _t -> new ArrayList<>()).add(handler);
+        handlerMap.computeIfAbsent(type, _t -> new CopyOnWriteArrayList<>()).add(handler);
     }
 
     private record HandlerInvocationTarget(@Nullable Object instance, @NotNull Class<?> clazz) {
@@ -179,7 +235,6 @@ public final class AlertsClient {
     private void parseAndRegister(HandlerInvocationTarget target) {
         Arrays.stream(target.clazz.getDeclaredMethods())
                 .forEach(method -> {
-                    // Ensure static match
                     if (Modifier.isStatic(method.getModifiers()) != target.isStatic()) return;
 
                     OnAlert annotation = method.getAnnotation(OnAlert.class);
@@ -201,8 +256,8 @@ public final class AlertsClient {
                             if (takesAlert) method.invoke(target.instance(), model);
                             else method.invoke(target.instance());
                         } catch (Exception e) {
-                            e.printStackTrace(System.err);
-                            throw new RuntimeException("Failed to invoke handler " + method.getName(), e);
+                            LOGGER.log(Level.WARNING, "Failed to invoke handler "
+                                    + method.getDeclaringClass().getSimpleName() + "#" + method.getName(), e);
                         }
                     };
 
@@ -214,31 +269,28 @@ public final class AlertsClient {
     /**
      * Registers all non-static handler methods annotated with {@link OnAlert} from the given object instance.
      *
-     * @param handler The object instance containing the handler methods.
-     * @throws IllegalStateException if the handler instance has already been registered.
-     * @throws IllegalArgumentException if an annotated method has invalid parameter types.
+     * @param handler the object instance containing the handler methods
+     * @throws IllegalStateException    if the handler instance has already been registered
+     * @throws IllegalArgumentException if an annotated method has invalid parameter types
      */
     public void registerHandlers(Object handler) {
-        if (registeredObjects.contains(handler))
+        if (!registeredObjects.add(handler))
             throw new IllegalStateException("Handler " + handler.hashCode() + " is already registered");
 
-        Class<?> clazz = handler.getClass();
-        parseAndRegister(new HandlerInvocationTarget(handler, clazz));
-        registeredObjects.add(handler);
+        parseAndRegister(new HandlerInvocationTarget(handler, handler.getClass()));
     }
 
     /**
      * Registers all static handler methods annotated with {@link OnAlert} from the given class.
      *
-     * @param clazz The class containing the static handler methods.
-     * @throws IllegalStateException if the class has already been registered.
-     * @throws IllegalArgumentException if an annotated method has invalid parameter types.
+     * @param clazz the class containing the static handler methods
+     * @throws IllegalStateException    if the class has already been registered
+     * @throws IllegalArgumentException if an annotated method has invalid parameter types
      */
     public void registerHandlers(Class<?> clazz) {
-        if (registeredClasses.contains(clazz))
+        if (!registeredClasses.add(clazz))
             throw new IllegalStateException("Handler " + clazz.getSimpleName() + " is already registered");
 
         parseAndRegister(new HandlerInvocationTarget(null, clazz));
-        registeredClasses.add(clazz);
     }
 }

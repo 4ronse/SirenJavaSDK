@@ -1,5 +1,6 @@
 package dev.ronse.siren.sdk.clients;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
@@ -21,16 +22,27 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.logging.Logger;
 
 
 public final class SirenClient {
 
-    private @NotNull final OkHttpClient client;
+    private static final Logger LOGGER = Logger.getLogger(SirenClient.class.getName());
+
+    private static final String DEFAULT_BASE_URL = "https://api.siren.co.il";
+    private static final String API_KEY_HEADER = "X-API-Key";
+    private static final long READ_TIMEOUT_SECONDS = 25;
+    private static final int ERROR_BODY_PREVIEW_LEN = 1000;
+
+    // Core
+    private final String apiKey;
+    private final URI baseURI;
+
+    private final OkHttpClient client;
     private final ObjectMapper objectMapper;
 
-    final String apiKey;
-    @NotNull final URI baseURI;
-
+    // Sub Clients
     private final StatsClient statsClient;
     private final DataClient dataClient;
     private AlertsClient alertsClient;
@@ -41,7 +53,7 @@ public final class SirenClient {
      * @param apiKey Your Siren API key
      */
     public SirenClient(@NotNull String apiKey) {
-        this(apiKey, "https://api.siren.co.il");
+        this(apiKey, DEFAULT_BASE_URL);
     }
 
     /**
@@ -56,220 +68,232 @@ public final class SirenClient {
 
         this.apiKey = apiKey;
         this.baseURI = URI.create(baseURI);
-        this.client = new OkHttpClient.Builder()
-                .readTimeout(Duration.ofSeconds(25))
-                .build();
-
-        this.objectMapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .registerModule(new SimpleModule().addDeserializer(Instant.class, new JsonDeserializer<>() {
-                    // API calls result in inconsistent timestamp formats.
-                    // Some timestamps have milliseconds and some don't
-                    // Timezone stamp also changes to either Z or +00?
-                    // Probably javascript anomaly idk
-
-                    private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder()
-                            .appendPattern("yyyy-MM-dd")
-                            .optionalStart().appendLiteral('T').optionalEnd()
-                            .optionalStart().appendLiteral(' ').optionalEnd()
-                            .appendPattern("HH:mm:ss")
-                            .optionalStart().appendFraction(ChronoField.MILLI_OF_SECOND, 0, 3, true).optionalEnd()
-                            .appendPattern("[XXXXX][XXXX][XXX][XX][X]")
-                            .toFormatter()
-                            .withZone(ZoneOffset.UTC);
-
-                    @Override
-                    public Instant deserialize(JsonParser p, DeserializationContext ctx) throws IOException {
-                        return Instant.from(FORMATTER.parse(p.getText()));
-                    }
-                }))
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
+        this.client = createHttpClient();
+        this.objectMapper = createObjectMapper();
 
         statsClient = StatsClient.fromSirenClient(this);
         dataClient = DataClient.fromSirenClient(this);
     }
 
-    // -------------------------
-    // Sub-clients
-    // -------------------------
+    // ------------------------------------------------------------------------
+    // Public API
+    // ------------------------------------------------------------------------
 
-    /**
-     * Access statistics endpoints - history, cities, distribution, summary, incidents.
-     *
-     * <pre>{@code
-     * client.stats().history();
-     * client.stats().cities(new CitiesOptions().limit(10));
-     * }</pre>
-     */
     public StatsClient stats() {
         return statsClient;
     }
 
-    /**
-     * Access data endpoints - shelter search, cities catalog.
-     *
-     * <pre>{@code
-     * client.data().cities();
-     * client.data().shelterSearch(new ShelterSearchOpts(...));
-     * }</pre>
-     */
     public DataClient data() {
         return dataClient;
     }
 
-    /**
-     * Alerts client
-     */
     public AlertsClient alertsClient() {
-        if(alertsClient == null) alertsClient = AlertsClient.fromSirenClient(this);
+        if (alertsClient == null) {
+            alertsClient = AlertsClient.fromSirenClient(this);
+        }
+
         return alertsClient;
     }
 
     public AlertsClient alertsClient(AlertsClientOpts opts) {
-        if(alertsClient != null) throw new IllegalStateException("Each SirenClient may have a single instance of AlertsClient!");
+        if (alertsClient != null) {
+            throw new IllegalStateException(
+                    "Each SirenClient may only create one AlertsClient instance."
+            );
+        }
+
         alertsClient = AlertsClient.fromSirenClient(this, opts);
         return alertsClient;
     }
 
-    // -------------------------
-    // Health
-    // -------------------------
-
-    /**
-     * Pings the API to check if it is reachable and healthy.
-     *
-     * @return true if the API responds with OK
-     */
     public boolean isHealthy() throws IOException {
-        return getString("/health").equalsIgnoreCase("ok");
+        return fetchText("/health").equalsIgnoreCase("ok");
     }
 
     public Map<AlertType, List<String>> active() throws IOException {
-        return get("/active", QueryParametersList.EMPTY, new TypeReference<>() { });
+        return get("/active", QueryParametersList.EMPTY, new TypeReference<>() {});
     }
 
-    // -------------------------
-    // Internal HTTP
-    // -------------------------
+    // ------------------------------------------------------------------------
+    // Package Access
+    // ------------------------------------------------------------------------
 
-    /**
-     * @hidden - not part of the public API
-     */
-    @NotNull URI getURIRelative(String path) {
+    @NotNull
+    URI getURIRelative(String path) {
         return baseURI.resolve(path);
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    @NotNull OkHttpClient getClient() {
+    @NotNull
+    OkHttpClient getClient() {
         return client;
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
     ObjectMapper getObjectMapper() {
         return objectMapper;
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    private <T> T execute(Request request, Class<T> type) throws IOException {
-        return objectMapper.readValue(getString(request), type);
-    }
-    /** @hidden — not part of the public API */
-    private <T> T execute(Request request, TypeReference<T> type) throws IOException {
-        return objectMapper.readValue(getString(request), type);
+    URI baseUri() {
+        return baseURI;
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    public <T> T get(String path, QueryParametersList params, Class<T> type) throws IOException {
-        HttpUrl.Builder urlBuilder = HttpUrl.get(getURIRelative(path)).newBuilder();
-        params.addToHttpUrlBuilder(urlBuilder);
-
-        Request request = new Request.Builder()
-                .url(urlBuilder.build())
-                .addHeader("X-API-Key", apiKey)
-                .get()
-                .build();
-
-        return execute(request, type);
+    String apiKey() {
+        return apiKey;
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    public <T> T get(String path, Class<T> type) throws IOException {
+    // ------------------------------------------------------------------------
+    // GET Helpers
+    // ------------------------------------------------------------------------
+
+    public <T> T get(
+            String path,
+            QueryParametersList params,
+            Class<T> type
+    ) throws IOException {
+        return objectMapper.readValue(
+                fetchText(buildGetRequest(path, params)),
+                type
+        );
+    }
+
+    public <T> T get(
+            String path,
+            Class<T> type
+    ) throws IOException {
         return get(path, QueryParametersList.EMPTY, type);
     }
 
-    /** @hidden — not part of the public API */
-    public <T> T get(String path, QueryParametersList params, TypeReference<T> type) throws IOException {
-        HttpUrl.Builder urlBuilder = HttpUrl.get(getURIRelative(path)).newBuilder();
-        params.addToHttpUrlBuilder(urlBuilder);
-
-        Request request = new Request.Builder()
-                .url(urlBuilder.build())
-                .addHeader("X-API-Key", apiKey)
-                .get()
-                .build();
-
-        return execute(request, type);
+    public <T> T get(
+            String path,
+            QueryParametersList params,
+            TypeReference<T> type
+    ) throws IOException {
+        return objectMapper.readValue(
+                fetchText(buildGetRequest(path, params)),
+                type
+        );
     }
 
-    /** @hidden — not part of the public API */
-    public <T> T get(String path, TypeReference<T> type) throws IOException {
+    public <T> T get(
+            String path,
+            TypeReference<T> type
+    ) throws IOException {
         return get(path, QueryParametersList.EMPTY, type);
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    public String getString(Request request) throws IOException {
+    public String fetchText(String path) throws IOException {
+        return fetchText(path, QueryParametersList.EMPTY);
+    }
+
+    public String fetchText(
+            String path,
+            QueryParametersList params
+    ) throws IOException {
+        return fetchText(buildGetRequest(path, params));
+    }
+
+    // Request Construction
+    private Request buildGetRequest(String path, QueryParametersList params) {
+        HttpUrl.Builder urlBuilder = Objects.requireNonNull(HttpUrl.get(getURIRelative(path))).newBuilder();
+        params.addToHttpUrlBuilder(urlBuilder);
+        return new Request.Builder()
+                .url(urlBuilder.build())
+                .addHeader(API_KEY_HEADER, apiKey)
+                .get()
+                .build();
+    }
+
+    private String fetchText(Request request) throws IOException {
+        long start = System.nanoTime();
+        HttpUrl url = request.url();
+
+        LOGGER.fine(() -> String.format("HTTP %s %s", request.method(), url));
+
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException(
-                        "Unexpected response code: " + response.code() +
-                                "\n" + response.body().string()
-                );
+            long duration = (System.nanoTime() - start) / 1_000_000;
+            String body = response.body().string();
+
+            if(!response.isSuccessful()) {
+                LOGGER.warning(() -> String.format(
+                        """
+                        API Request Failed
+                            Method      : %s
+                            URL         : %s
+                            Status      : %d
+                            Duration    : %d ms
+                            Body        : %s
+                        """,
+                        request.method(), url, response.code(), duration, truncate(body)
+                ));
+
+                throw new IOException(String.format("HTTP %d returned : %s", response.code(), url));
             }
 
-            ResponseBody body = response.body();
-            return body.string();
+            LOGGER.finer(() -> String.format(
+                    """
+                    API Request Completed
+                        Method      : %s
+                        URL         : %s
+                        Status      : %d
+                        Duration    : %d ms
+                        Size        : %d bytes
+                        Content     : %s
+                    """,
+                    request.method(), url, response.code(), duration, body.length(), truncate(body)
+            ));
+
+            return body;
         }
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    public String getString(String path, QueryParametersList params) throws IOException {
-        HttpUrl.Builder urlBuilder = HttpUrl.get(getURIRelative(path)).newBuilder();
-        params.addToHttpUrlBuilder(urlBuilder);
+    // ----------------------------------
+    // Utilities
+    // ----------------------------------
 
-        Request request = new Request.Builder()
-                .url(urlBuilder.build())
-                .get()
+    static String truncate(String text) {
+        if (text == null || text.isBlank()) return "";
+        if(text.length() <= ERROR_BODY_PREVIEW_LEN) return text;
+        return text.substring(0, ERROR_BODY_PREVIEW_LEN) + "...";
+    }
+
+    private static OkHttpClient createHttpClient() {
+        return new OkHttpClient.Builder()
+                .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
                 .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful())
-                throw new IOException("Unexpected response code: " + response.code());
-
-            ResponseBody body = response.body();
-            return body.string();
-        }
     }
 
-    /**
-     * @hidden - not part of the public API
-     */
-    public String getString(String path) throws IOException {
-        return getString(path, QueryParametersList.EMPTY);
+    private static ObjectMapper createObjectMapper() {
+        SimpleModule instantDeserializerModule = new SimpleModule();
+        instantDeserializerModule.addDeserializer(Instant.class, new FlexibleInstantDeserializer());
+
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .registerModule(instantDeserializerModule)
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
+    }
+
+    private static final class FlexibleInstantDeserializer extends JsonDeserializer<Instant> {
+        private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder()
+                        .appendPattern("yyyy-MM-dd")
+                        .optionalStart().appendLiteral('T').optionalEnd()
+                        .optionalStart().appendLiteral(' ').optionalEnd()
+                        .appendPattern("HH:mm:ss")
+                        .optionalStart()
+                        .appendFraction(
+                                ChronoField.MILLI_OF_SECOND,
+                                0,
+                                3,
+                                true
+                        )
+                        .optionalEnd()
+                        .appendPattern("[XXXXX][XXXX][XXX][XX][X]")
+                        .toFormatter()
+                        .withZone(ZoneOffset.UTC);
+
+        @Override
+        public Instant deserialize(JsonParser p, DeserializationContext _ctx) throws IOException, JacksonException {
+            return Instant.from(FORMATTER.parse(p.getText()));
+        }
     }
 }
