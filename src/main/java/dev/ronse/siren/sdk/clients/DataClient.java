@@ -78,7 +78,7 @@ public final class DataClient {
         );
     }
 
-    public Paginator<CitiesCatalogModel> citiesPaginator() throws IOException {
+    public Paginator<CitiesCatalogModel> citiesPaginator() {
         return citiesPaginator(new CitiesCatalogOpts());
     }
 }
