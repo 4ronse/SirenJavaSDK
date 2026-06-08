@@ -144,50 +144,33 @@ public final class SirenClient {
     // GET Helpers
     // ------------------------------------------------------------------------
 
-    public <T> T get(
-            String path,
-            QueryParametersList params,
-            Class<T> type
-    ) throws IOException {
+    <T> T get(String path, QueryParametersList params, Class<T> type) throws IOException {
         return objectMapper.readValue(
                 fetchText(buildGetRequest(path, params)),
                 type
         );
     }
 
-    public <T> T get(
-            String path,
-            Class<T> type
-    ) throws IOException {
+    <T> T get(String path, Class<T> type) throws IOException {
         return get(path, QueryParametersList.EMPTY, type);
     }
 
-    public <T> T get(
-            String path,
-            QueryParametersList params,
-            TypeReference<T> type
-    ) throws IOException {
+    <T> T get(String path, QueryParametersList params, TypeReference<T> type) throws IOException {
         return objectMapper.readValue(
                 fetchText(buildGetRequest(path, params)),
                 type
         );
     }
 
-    public <T> T get(
-            String path,
-            TypeReference<T> type
-    ) throws IOException {
+    <T> T get(String path, TypeReference<T> type) throws IOException {
         return get(path, QueryParametersList.EMPTY, type);
     }
 
-    public String fetchText(String path) throws IOException {
+    String fetchText(String path) throws IOException {
         return fetchText(path, QueryParametersList.EMPTY);
     }
 
-    public String fetchText(
-            String path,
-            QueryParametersList params
-    ) throws IOException {
+    String fetchText(String path, QueryParametersList params) throws IOException {
         return fetchText(buildGetRequest(path, params));
     }
 
