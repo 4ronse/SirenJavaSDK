@@ -4,6 +4,7 @@ import dev.ronse.siren.sdk.clients.interfaces.ISirenAlertHandler;
 import dev.ronse.siren.sdk.clients.interfaces.OnAlert;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.model.AlertModel;
+import dev.ronse.siren.sdk.utils.StringUtils;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 import io.socket.client.IO;
 import io.socket.client.Socket;
@@ -104,7 +105,7 @@ public final class AlertsClient {
                                     Raw JSON        : %s
                                 """,
                                 alert.type(), alert.title(), alert.instructions(), alert.receivedAt(), alert.isTest() ? "True" : "False",
-                                alert.cities().size(), citiesStr, SirenClient.truncate(jsonAlert)
+                                alert.cities().size(), citiesStr, StringUtils.truncate(jsonAlert)
                         );
                     });
 

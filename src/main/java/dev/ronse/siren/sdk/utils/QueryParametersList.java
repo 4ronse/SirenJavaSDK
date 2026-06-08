@@ -11,8 +11,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public final class QueryParametersList {
-    private static final Logger LOGGER = Logger.getLogger(QueryParametersList.class.getName());
-
     public static final QueryParametersList EMPTY = new QueryParametersList(true);
 
     private final Map<String, String> map = new HashMap<>();

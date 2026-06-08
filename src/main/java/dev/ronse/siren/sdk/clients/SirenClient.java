@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
+import dev.ronse.siren.sdk.utils.StringUtils;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 import okhttp3.*;
 import org.jetbrains.annotations.NotNull;
@@ -205,7 +206,7 @@ public final class SirenClient {
                             Duration    : %d ms
                             Body        : %s
                         """,
-                        request.method(), url, response.code(), duration, truncate(body)
+                        request.method(), url, response.code(), duration, StringUtils.truncate(body)
                 ));
 
                 throw new IOException(String.format("HTTP %d returned : %s", response.code(), url));
@@ -221,7 +222,7 @@ public final class SirenClient {
                         Size        : %d bytes
                         Content     : %s
                     """,
-                    request.method(), url, response.code(), duration, body.length(), truncate(body)
+                    request.method(), url, response.code(), duration, body.length(), StringUtils.truncate(body)
             ));
 
             return body;
@@ -231,12 +232,6 @@ public final class SirenClient {
     // ----------------------------------
     // Utilities
     // ----------------------------------
-
-    static String truncate(String text) {
-        if (text == null || text.isBlank()) return "";
-        if(text.length() <= ERROR_BODY_PREVIEW_LEN) return text;
-        return text.substring(0, ERROR_BODY_PREVIEW_LEN) + "...";
-    }
 
     private static OkHttpClient createHttpClient() {
         return new OkHttpClient.Builder()
