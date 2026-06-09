@@ -10,6 +10,8 @@ import io.socket.client.IO;
 import io.socket.client.Socket;
 import io.socket.client.SocketOptionBuilder;
 import io.socket.emitter.Emitter;
+import okhttp3.Dispatcher;
+import okhttp3.OkHttpClient;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -17,6 +19,7 @@ import org.json.JSONArray;
 
 import java.lang.reflect.Modifier;
 import java.net.URI;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -42,6 +45,7 @@ public final class AlertsClient {
 
     private static final Logger LOGGER = Logger.getLogger(AlertsClient.class.getName());
     private static final int MAX_CITIES_TO_LOG = 5;
+    private static final long READ_TIMEOUT_SECONDS = 25;
 
     // Catch-all handlers (registered via onAlert(handler) or @OnAlert with no filter).
     // Kept separate from handlerMap to avoid using null as a ConcurrentHashMap key,
@@ -67,18 +71,30 @@ public final class AlertsClient {
     );
 
     private final Socket socket;
+    private final Dispatcher dispatcher;
 
     private AlertsClient(SirenClient client, @Nullable AlertsClientOpts opts) {
         if (opts == null) opts = AlertsClientOpts.builder().build();
 
         URI uri = opts.getBaseURL() != null ? opts.getBaseURL() : client.baseUri();
 
+        dispatcher = new Dispatcher();
+
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .dispatcher(dispatcher)
+                .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
+                .build();
+
         IO.Options ioOpts = SocketOptionBuilder.builder(opts.getIoOpts())
                 .setAuth(Map.of("apiKey", client.apiKey()))
                 .setQuery(opts.query().toQueryString())
                 .build();
+        ioOpts.callFactory = okHttpClient;
+        ioOpts.webSocketFactory = okHttpClient;
 
         socket = IO.socket(uri, ioOpts);
+        attachLifecycleLogging();
+
         socket.on("alert", args -> {
             try {
                 JSONArray alerts = (JSONArray) args[0];
@@ -94,7 +110,7 @@ public final class AlertsClient {
 
                         return String.format(
                                 """
-                                IO.Socket / New Alert
+                                New Alert
                                     Type            : %s
                                     Title           : %s
                                     Instructions    : %s
@@ -116,6 +132,17 @@ public final class AlertsClient {
                 LOGGER.log(Level.WARNING, "Failed to parse alert", e);
             }
         });
+    }
+
+    private void attachLifecycleLogging() {
+        socket.on(Socket.EVENT_CONNECT, args ->
+                LOGGER.info("Socket connected"));
+
+        socket.on(Socket.EVENT_DISCONNECT, args ->
+                LOGGER.info(() -> "Socket disconnected: " + Arrays.toString(args)));
+
+        socket.on(Socket.EVENT_CONNECT_ERROR, args ->
+                LOGGER.log(Level.WARNING, "Socket connect error: {0}", Arrays.toString(args)));
     }
 
     @NotNull
@@ -155,7 +182,7 @@ public final class AlertsClient {
      * Closes the Socket.IO connection and stops receiving alerts.
      */
     public void disconnect() {
-        socket.disconnect();
+        this.close();
     }
 
     /**
@@ -163,6 +190,7 @@ public final class AlertsClient {
      */
     public void close() {
         socket.close();
+        dispatcher.executorService().shutdownNow();
     }
 
     /**
