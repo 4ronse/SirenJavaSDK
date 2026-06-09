@@ -1,5 +1,6 @@
 package dev.ronse.siren.sdk.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import dev.ronse.siren.sdk.wrappers.AlertType;
 import org.jetbrains.annotations.Nullable;
 
@@ -11,7 +12,7 @@ public record AlertModel(
         List<String> cities,
         String title,
         String instructions,
-        @Nullable Instant receivedAt,
+        @Nullable @JsonAlias({"timestamp", "receivedAt"}) Instant receivedAt,
         boolean isTest
 ) {
     /** Returns a copy of this alert with {@code isTest} forced to {@code true}. */
