@@ -5,9 +5,11 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public final class AlertType {
     public static final AlertType MISSILES                         = new AlertType("missiles");
@@ -65,10 +67,19 @@ public final class AlertType {
         return rawValue.endsWith("Drill");
     }
 
+    public String getDisplayName() {
+        return Arrays.stream(
+                        rawValue.replaceAll("([A-Z])", " $1")
+                                .split(" "))
+                .filter(s -> !s.isEmpty())
+                .map(s -> Character.toUpperCase(s.charAt(0)) + s.substring(1))
+                .collect(Collectors.joining(" ")) + (isKnown() ? "" : " [UNKNOWN]");
+    }
+
     @JsonValue
     @Override
     public String toString() {
-        return rawValue;
+        return getDisplayName();
     }
 
     @Override
