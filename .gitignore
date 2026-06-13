@@ -2,10 +2,6 @@
 **.env
 !**.env.example
 
-### Manual Test Files
-src/main/java/dev/ronse/siren/sdk/Main.java
-src/main/java/dev/ronse/siren/sdk/TestHandler.java
-src/main/resources/logging.properties
 
 .gradle
 build/

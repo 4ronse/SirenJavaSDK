@@ -1,4 +1,4 @@
-package dev.ronse.siren.sdk.clients;
+package dev.ronse.siren.sdk.clients.restapi;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import dev.ronse.siren.sdk.clients.options.data.CitiesCatalogOpts;

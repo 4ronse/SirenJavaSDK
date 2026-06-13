@@ -2,7 +2,9 @@ package dev.ronse.siren.sdk.clients;
 
 import dev.ronse.siren.sdk.clients.interfaces.ISirenAlertHandler;
 import dev.ronse.siren.sdk.clients.interfaces.OnAlert;
-import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
+import dev.ronse.siren.sdk.clients.options.clients.SirenAlertsSocketClientOpts;
+import dev.ronse.siren.sdk.clients.restapi.SirenClient;
+import dev.ronse.siren.sdk.internal.JsonSupport;
 import dev.ronse.siren.sdk.model.AlertModel;
 import dev.ronse.siren.sdk.utils.StringUtils;
 import dev.ronse.siren.sdk.wrappers.AlertType;
@@ -24,48 +26,20 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-/**
- * Client for receiving real-time alerts via a persistent Socket.IO connection.
- *
- * <pre>{@code
- * AlertsClient alerts = client.alerts();
- *
- * alerts.onConnect(args -> System.out.println("Connected"));
- * alerts.onAlert(alert -> System.out.println("Alert: " + alert.title()));
- * alerts.onAlert(AlertType.MISSILES, alert -> System.out.println("Missile: " + alert.cities()));
- *
- * alerts.connect();
- * }</pre>
- */
-public final class AlertsClient {
+public final class SirenAlertsSocketClient {
 
-    private static final Logger LOGGER = Logger.getLogger(AlertsClient.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SirenAlertsSocketClient.class.getName());
     private static final int MAX_CITIES_TO_LOG = 5;
     private static final long READ_TIMEOUT_SECONDS = 25;
 
-    // Catch-all handlers (registered via onAlert(handler) or @OnAlert with no filter).
-    // Kept separate from handlerMap to avoid using null as a ConcurrentHashMap key,
-    // which is not permitted.
     private final List<ISirenAlertHandler> catchAllHandlers = new CopyOnWriteArrayList<>();
-
-    // Type-specific handlers. ConcurrentHashMap so reads from the Socket.IO thread
-    // and writes from the registration thread don't race. Values are
-    // CopyOnWriteArrayList so iteration during dispatch is over a stable snapshot.
     private final Map<AlertType, List<ISirenAlertHandler>> handlerMap = new ConcurrentHashMap<>();
-
-    // CopyOnWriteArraySet is a direct thread-safe Set from java.util.concurrent.
-    // Safe here because Class objects are singletons per classloader —
-    // reference equality and equals() are the same thing for Class<?>.
     private final Set<Class<?>> registeredClasses = new CopyOnWriteArraySet<>();
-
-    // CopyOnWriteArraySet would be wrong here — it uses equals(), not reference
-    // identity. Two distinct handler instances that happen to override equals()
-    // would be treated as duplicates. IdentityHashMap backing guarantees we track
-    // the exact object reference, not logical equality.
     private final Set<Object> registeredObjects = Collections.synchronizedSet(
             Collections.newSetFromMap(new IdentityHashMap<>())
     );
@@ -73,10 +47,8 @@ public final class AlertsClient {
     private final Socket socket;
     private final Dispatcher dispatcher;
 
-    private AlertsClient(SirenClient client, @Nullable AlertsClientOpts opts) {
-        if (opts == null) opts = AlertsClientOpts.builder().build();
-
-        URI uri = opts.getBaseURL() != null ? opts.getBaseURL() : client.baseUri();
+    public SirenAlertsSocketClient(@NotNull SirenAlertsSocketClientOpts opts) {
+        URI uri = opts.socketUri;
 
         dispatcher = new Dispatcher();
 
@@ -85,9 +57,9 @@ public final class AlertsClient {
                 .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
                 .build();
 
-        IO.Options ioOpts = SocketOptionBuilder.builder(opts.getIoOpts())
-                .setAuth(Map.of("apiKey", client.apiKey()))
-                .setQuery(opts.query().toQueryString())
+        IO.Options ioOpts = SocketOptionBuilder.builder(opts.ioOpts)
+                .setAuth(Map.of("apiKey", opts.apiKey))
+                .setQuery(opts.queryParametersList.toQueryString())
                 .build();
         ioOpts.callFactory = okHttpClient;
         ioOpts.webSocketFactory = okHttpClient;
@@ -101,7 +73,7 @@ public final class AlertsClient {
 
                 for (int i = 0; i < alerts.length(); i++) {
                     String jsonAlert = alerts.getString(i);
-                    AlertModel alert = client.getObjectMapper().readValue(jsonAlert, AlertModel.class);
+                    AlertModel alert = JsonSupport.getObjectMapper().readValue(jsonAlert, AlertModel.class);
 
                     LOGGER.finer(() -> {
                         String citiesStr = alert.cities().stream().limit(MAX_CITIES_TO_LOG).collect(Collectors.joining(", "));
@@ -134,6 +106,12 @@ public final class AlertsClient {
         });
     }
 
+    public static SirenAlertsSocketClient builder(Consumer<SirenAlertsSocketClientOpts.Builder> optsBuilderConsumer) {
+        var builder = SirenAlertsSocketClientOpts.builder();
+        optsBuilderConsumer.accept(builder);
+        return new SirenAlertsSocketClient(builder.build());
+    }
+
     private void attachLifecycleLogging() {
         socket.on(Socket.EVENT_CONNECT, args ->
                 LOGGER.info("Socket connected"));
@@ -143,18 +121,6 @@ public final class AlertsClient {
 
         socket.on(Socket.EVENT_CONNECT_ERROR, args ->
                 LOGGER.log(Level.WARNING, "Socket connect error: {0}", Arrays.toString(args)));
-    }
-
-    @NotNull
-    @Contract(value = "_ -> new")
-    static AlertsClient fromSirenClient(SirenClient client) {
-        return new AlertsClient(client, null);
-    }
-
-    @NotNull
-    @Contract(value = "_,_ -> new")
-    static AlertsClient fromSirenClient(SirenClient client, AlertsClientOpts opts) {
-        return new AlertsClient(client, opts);
     }
 
     public void sendTestAlert(AlertModel alert) {

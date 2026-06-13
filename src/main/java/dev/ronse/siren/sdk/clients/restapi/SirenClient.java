@@ -1,12 +1,9 @@
-package dev.ronse.siren.sdk.clients;
+package dev.ronse.siren.sdk.clients.restapi;
 
-import com.fasterxml.jackson.core.JacksonException;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import dev.ronse.siren.sdk.clients.options.clients.AlertsClientOpts;
+import dev.ronse.siren.sdk.internal.JsonSupport;
+import dev.ronse.siren.sdk.internal.SharedConstants;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
 import dev.ronse.siren.sdk.utils.StringUtils;
 import dev.ronse.siren.sdk.wrappers.AlertType;
@@ -16,11 +13,6 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,10 +23,7 @@ public final class SirenClient {
 
     private static final Logger LOGGER = Logger.getLogger(SirenClient.class.getName());
 
-    private static final String DEFAULT_BASE_URL = "https://api.siren.co.il";
     private static final String API_KEY_HEADER = "X-API-Key";
-    private static final long READ_TIMEOUT_SECONDS = 25;
-    private static final int ERROR_BODY_PREVIEW_LEN = 1000;
 
     // Core
     private final String apiKey;
@@ -46,7 +35,6 @@ public final class SirenClient {
     // Sub Clients
     private final StatsClient statsClient;
     private final DataClient dataClient;
-    private AlertsClient alertsClient;
 
     /**
      * Creates a SirenClient with the default API base URL.
@@ -54,7 +42,7 @@ public final class SirenClient {
      * @param apiKey Your Siren API key
      */
     public SirenClient(@NotNull String apiKey) {
-        this(apiKey, DEFAULT_BASE_URL);
+        this(apiKey, String.valueOf(SharedConstants.API_BASE_URI));
     }
 
     /**
@@ -70,7 +58,7 @@ public final class SirenClient {
         this.apiKey = apiKey;
         this.baseURI = URI.create(baseURI);
         this.client = createHttpClient();
-        this.objectMapper = createObjectMapper();
+        this.objectMapper = JsonSupport.getObjectMapper();
 
         statsClient = StatsClient.fromSirenClient(this);
         dataClient = DataClient.fromSirenClient(this);
@@ -88,25 +76,6 @@ public final class SirenClient {
         return dataClient;
     }
 
-    public AlertsClient alertsClient() {
-        if (alertsClient == null) {
-            alertsClient = AlertsClient.fromSirenClient(this);
-        }
-
-        return alertsClient;
-    }
-
-    public AlertsClient alertsClient(AlertsClientOpts opts) {
-        if (alertsClient != null) {
-            throw new IllegalStateException(
-                    "Each SirenClient may only create one AlertsClient instance."
-            );
-        }
-
-        alertsClient = AlertsClient.fromSirenClient(this, opts);
-        return alertsClient;
-    }
-
     public boolean isHealthy() throws IOException {
         return fetchText("/health").equalsIgnoreCase("ok");
     }
@@ -122,23 +91,6 @@ public final class SirenClient {
     @NotNull
     URI getURIRelative(String path) {
         return baseURI.resolve(path);
-    }
-
-    @NotNull
-    OkHttpClient getClient() {
-        return client;
-    }
-
-    ObjectMapper getObjectMapper() {
-        return objectMapper;
-    }
-
-    URI baseUri() {
-        return baseURI;
-    }
-
-    String apiKey() {
-        return apiKey;
     }
 
     // ------------------------------------------------------------------------
@@ -235,43 +187,7 @@ public final class SirenClient {
 
     private static OkHttpClient createHttpClient() {
         return new OkHttpClient.Builder()
-                .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
+                .readTimeout(Duration.ofSeconds(SharedConstants.READ_TIMEOUT_SECONDS))
                 .build();
-    }
-
-    private static ObjectMapper createObjectMapper() {
-        SimpleModule instantDeserializerModule = new SimpleModule();
-        instantDeserializerModule.addDeserializer(Instant.class, new FlexibleInstantDeserializer());
-
-        return new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .registerModule(instantDeserializerModule)
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
-    }
-
-    private static final class FlexibleInstantDeserializer extends JsonDeserializer<Instant> {
-        private static final DateTimeFormatter FORMATTER = new DateTimeFormatterBuilder()
-                        .appendPattern("yyyy-MM-dd")
-                        .optionalStart().appendLiteral('T').optionalEnd()
-                        .optionalStart().appendLiteral(' ').optionalEnd()
-                        .appendPattern("HH:mm:ss")
-                        .optionalStart()
-                        .appendFraction(
-                                ChronoField.MILLI_OF_SECOND,
-                                0,
-                                3,
-                                true
-                        )
-                        .optionalEnd()
-                        .appendPattern("[XXXXX][XXXX][XXX][XX][X]")
-                        .toFormatter()
-                        .withZone(ZoneOffset.UTC);
-
-        @Override
-        public Instant deserialize(JsonParser p, DeserializationContext _ctx) throws IOException, JacksonException {
-            return Instant.from(FORMATTER.parse(p.getText()));
-        }
     }
 }
