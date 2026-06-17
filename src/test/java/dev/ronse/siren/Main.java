@@ -6,6 +6,7 @@ import dev.ronse.siren.sdk.wrappers.AlertType;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.logging.LogManager;
@@ -22,7 +23,10 @@ public class Main {
             throw new RuntimeException(e);
         }
 
-        var alertsClient = SirenAlertsSocketClient.builder(opts -> opts.apiKey(System.getenv("SIREN_API_KEY")));
+        var alertsClient = SirenAlertsSocketClient.build(opts -> opts
+                .apiKey(System.getenv("SIREN_API_KEY"))
+                .socketUri(URI.create("https://api.siren.co.il/test"))
+        );
 
         alertsClient.registerHandlers(TestHandler.class);
         alertsClient.connect();

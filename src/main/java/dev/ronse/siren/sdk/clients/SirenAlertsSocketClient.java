@@ -3,7 +3,6 @@ package dev.ronse.siren.sdk.clients;
 import dev.ronse.siren.sdk.clients.interfaces.ISirenAlertHandler;
 import dev.ronse.siren.sdk.clients.interfaces.OnAlert;
 import dev.ronse.siren.sdk.clients.options.clients.SirenAlertsSocketClientOpts;
-import dev.ronse.siren.sdk.clients.restapi.SirenClient;
 import dev.ronse.siren.sdk.internal.JsonSupport;
 import dev.ronse.siren.sdk.model.AlertModel;
 import dev.ronse.siren.sdk.utils.StringUtils;
@@ -14,10 +13,10 @@ import io.socket.client.SocketOptionBuilder;
 import io.socket.emitter.Emitter;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
-import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.lang.reflect.Modifier;
 import java.net.URI;
@@ -47,7 +46,10 @@ public final class SirenAlertsSocketClient {
     private final Socket socket;
     private final Dispatcher dispatcher;
 
-    public SirenAlertsSocketClient(@NotNull SirenAlertsSocketClientOpts opts) {
+    private SirenAlertsSocketClient(@NotNull SirenAlertsSocketClientOpts opts) {
+        if(opts.apiKey == null || opts.apiKey.isBlank()) LOGGER.log(Level.WARNING, () -> "api-key is not set!");
+        if(opts.socketUri == null) LOGGER.log(Level.WARNING, () -> "socket-uri is not set!");
+
         URI uri = opts.socketUri;
 
         dispatcher = new Dispatcher();
@@ -60,6 +62,7 @@ public final class SirenAlertsSocketClient {
         IO.Options ioOpts = SocketOptionBuilder.builder(opts.ioOpts)
                 .setAuth(Map.of("apiKey", opts.apiKey))
                 .setQuery(opts.queryParametersList.toQueryString())
+                .setForceNew(true)
                 .build();
         ioOpts.callFactory = okHttpClient;
         ioOpts.webSocketFactory = okHttpClient;
@@ -70,9 +73,11 @@ public final class SirenAlertsSocketClient {
         socket.on("alert", args -> {
             try {
                 JSONArray alerts = (JSONArray) args[0];
+                LOGGER.finer(() -> alerts.toString(2));
 
                 for (int i = 0; i < alerts.length(); i++) {
-                    String jsonAlert = alerts.getString(i);
+                    JSONObject alertJson = alerts.getJSONObject(i);
+                    String jsonAlert = alertJson.toString();
                     AlertModel alert = JsonSupport.getObjectMapper().readValue(jsonAlert, AlertModel.class);
 
                     LOGGER.finer(() -> {
@@ -106,7 +111,7 @@ public final class SirenAlertsSocketClient {
         });
     }
 
-    public static SirenAlertsSocketClient builder(Consumer<SirenAlertsSocketClientOpts.Builder> optsBuilderConsumer) {
+    public static SirenAlertsSocketClient build(Consumer<SirenAlertsSocketClientOpts.Builder> optsBuilderConsumer) {
         var builder = SirenAlertsSocketClientOpts.builder();
         optsBuilderConsumer.accept(builder);
         return new SirenAlertsSocketClient(builder.build());
@@ -155,8 +160,16 @@ public final class SirenAlertsSocketClient {
      * Closes the Socket.IO connection and stops receiving alerts.
      */
     public void close() {
+        socket.off();
         socket.close();
         dispatcher.executorService().shutdownNow();
+    }
+
+    public void unregisterAllHandlers() {
+        catchAllHandlers.clear();
+        handlerMap.clear();
+        registeredClasses.clear();
+        registeredObjects.clear();
     }
 
     /**

@@ -56,7 +56,6 @@ public final class SirenAlertsSocketClientOpts {
         }
 
         public SirenAlertsSocketClientOpts build() {
-            if (apiKey.isBlank()) throw new IllegalStateException("API key must be provided");
             return new SirenAlertsSocketClientOpts(this);
         }
     }

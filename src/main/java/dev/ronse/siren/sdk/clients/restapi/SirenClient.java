@@ -2,6 +2,7 @@ package dev.ronse.siren.sdk.clients.restapi;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
+import dev.ronse.siren.sdk.clients.options.clients.SirenClientOpts;
 import dev.ronse.siren.sdk.internal.JsonSupport;
 import dev.ronse.siren.sdk.internal.SharedConstants;
 import dev.ronse.siren.sdk.utils.QueryParametersList;
@@ -16,6 +17,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
@@ -37,31 +40,27 @@ public final class SirenClient {
     private final DataClient dataClient;
 
     /**
-     * Creates a SirenClient with the default API base URL.
-     *
-     * @param apiKey Your Siren API key
+     * Creates a SirenClient
      */
-    public SirenClient(@NotNull String apiKey) {
-        this(apiKey, String.valueOf(SharedConstants.API_BASE_URI));
-    }
+    private SirenClient(SirenClientOpts opts) {
+        if(opts.apiKey.isBlank())
+            LOGGER.log(Level.WARNING, () -> "API Key is blank!");
+        if(opts.apiUri.isBlank())
+            LOGGER.log(Level.WARNING, () -> "API URL Was not provided! Connection WILL fail!");
 
-    /**
-     * Creates a SirenClient with a custom base URL.
-     * Useful for testing against a mock or staging server.
-     *
-     * @param apiKey  Your Siren API key
-     * @param baseURI Base URL of the Siren API
-     */
-    public SirenClient(@NotNull String apiKey, @NotNull String baseURI) {
-        if (apiKey.isBlank()) throw new IllegalArgumentException("API key cannot be blank");
-
-        this.apiKey = apiKey;
-        this.baseURI = URI.create(baseURI);
+        this.apiKey = opts.apiKey;
+        this.baseURI = URI.create(opts.apiUri);
         this.client = createHttpClient();
         this.objectMapper = JsonSupport.getObjectMapper();
 
         statsClient = StatsClient.fromSirenClient(this);
         dataClient = DataClient.fromSirenClient(this);
+    }
+
+    public static SirenClient build(Consumer<SirenClientOpts.Builder> builderConsumer) {
+        var builder = SirenClientOpts.builder();
+        builderConsumer.accept(builder);
+        return new SirenClient(builder.build());
     }
 
     // ------------------------------------------------------------------------
